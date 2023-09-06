@@ -1,21 +1,27 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormGroup, FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { Store } from '@ngrx/store';
+import { Subscription } from 'rxjs';
+import { AppState } from 'src/app/app.reducer';
 import { AuthService } from 'src/app/services/auth.service';
 import Swal from 'sweetalert2';
+import { isLoading, stopLoading } from '../../shared/store/ui.actions';
 
 @Component({
   selector: 'app-register',
   templateUrl: './register.component.html',
   styles: [],
 })
-export class RegisterComponent {
+export class RegisterComponent implements OnInit, OnDestroy {
   registroForm: FormGroup;
-  cargando: boolean = false;
+  loading = false;
+  uiSubscription!: Subscription;
 
   constructor(
     private fb: FormBuilder,
     private router: Router,
+    private store: Store<AppState>,
     private authService: AuthService
   ) {
     this.registroForm = this.fb.group({
@@ -25,8 +31,15 @@ export class RegisterComponent {
     });
   }
 
+  ngOnInit(): void {
+    this.uiSubscription = this.store.select('ui').subscribe((ui) => {
+      this.loading = ui.isLoading;
+      console.log(ui.isLoading);
+    });
+  }
   async crearUsuario(): Promise<void> {
     if (this.registroForm.invalid) return;
+    this.store.dispatch(isLoading());
 
     Swal.fire({
       title: 'Espere por favor...',
@@ -35,13 +48,16 @@ export class RegisterComponent {
       },
     });
 
-    const { nombre,correo, password } = this.registroForm.value;
+    const { nombre, correo, password } = this.registroForm.value;
     try {
       await this.authService.createUser(nombre, correo, password);
+      this.store.dispatch(stopLoading());
 
       Swal.close();
       this.router.navigate(['/']);
     } catch (error) {
+      this.store.dispatch(stopLoading());
+
       const newError = error as Error;
       Swal.fire({
         icon: 'error',
@@ -49,5 +65,9 @@ export class RegisterComponent {
         text: newError.message,
       });
     }
+  }
+
+  ngOnDestroy() {
+    this.uiSubscription.unsubscribe();
   }
 }
